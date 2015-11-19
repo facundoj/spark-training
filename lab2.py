@@ -1,11 +1,25 @@
+import re
+import datetime
+
 from pyspark import SparkContext
 
-import re
 
-
-def parse_apache_time(time):
+def parse_apache_time(time_string):
+    # 01/Aug/1995:00:00:01 -0400
     # todo: implement
-    return time
+    res = re.search(r'(\d{2})/(\w{3})/(\d{4}):(\d{2}):(\d{2}):(\d{2}) (\S{5})', time_string)
+
+    if not res:
+        return
+
+    return datetime.datetime(
+        int(res.group(3)),
+        1,
+        int(res.group(1)),
+        int(res.group(4)),
+        int(res.group(5)),
+        int(res.group(6))
+    )
 
 
 class LogLine(object):
@@ -30,12 +44,19 @@ def parseLogLine(line):
 
     if not res:
         return
-    else:
-        info = []
-        for i in range(1, 10):
-            info.append(res.group(i))
 
-        return LogLine(*info)
+    info = []
+    for i in range(1, 10):
+        info.append(res.group(i))
 
-sc = SparkContext('local', 'Lab 2')
+    return LogLine(*info)
+
+l1 = '199.72.81.55 - - [01/Jul/1995:00:00:01 -0400] "GET /history/apollo/ HTTP/1.0" 200 6245'
+l2 = 'unicomp6.unicomp.net - - [01/Jul/1995:00:00:06 -0400] "GET /shuttle/countdown/ HTTP/1.0" 200 3985'
+l3 = '199.120.110.21 - - [01/Jul/1995:00:00:09 -0400] "GET /shuttle/missions/sts-73/mission-sts-73.html HTTP/1.0" 200 4085'
+
+print parseLogLine(l1).time
+print parseLogLine(l2).time
+
+# sc = SparkContext('local', 'Lab 2')
 
