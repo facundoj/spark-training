@@ -52,7 +52,7 @@ def parse_log_line(line):
         size = float(size)
 
     return (LogLine(res.group(1), res.group(2), res.group(3), parse_apache_time(res.group(4)),
-                   res.group(5), res.group(6), res.group(7), res.group(8), size), 1)
+                   res.group(5), res.group(6), res.group(7), int(res.group(8)), size), 1)
 
 
 LogLine = Row('host', 'remote_identity', 'local_identity', 'time',
@@ -68,7 +68,7 @@ inputRDD = sc.textFile('/home/facundo.jauregui/PycharmProjects/SparkTest/resourc
 parsedInputRDD = inputRDD.map(parse_log_line)
 
 # Removed log lines that don't match pattern
-cleanedInputRDD = parsedInputRDD.filter(lambda x: x[1] == 1).persist()
+cleanedInputRDD = parsedInputRDD.filter(lambda x: x[1] == 1).cache()
 
 # # (2a) ******************************
 # sizesRDD = cleanedInputRDD.map(lambda t: t[0].size).cache()
@@ -108,23 +108,108 @@ cleanedInputRDD = parsedInputRDD.filter(lambda x: x[1] == 1).persist()
 #     .map(lambda (host, _): host) \
 #     .take(20)
 
-# (2e) ******************************
-# Create RDD with visits count per endpoint
-endpointVisitsRDD = cleanedInputRDD \
-    .map(lambda (log, _): (log.endpoint.encode(encoding='utf-8'), 1)) \
-    .reduceByKey(lambda x, y: x + y) \
-
-# plt.figure()
-
-# Collecting data to plot
-endpointVisits = endpointVisitsRDD.collect()
-allEndpoints = []
-allVisits = []
-for (endpoint, visits) in endpointVisits:
-    allEndpoints.append(endpoint)
-    allVisits.append(visits)
-    # plt.bar(endpoint, visits)
-    print '%s\t%d' % (endpoint, visits)
-
+# # (2e) ******************************
+# # Create RDD with visits count per endpoint
+# endpointVisitsRDD = cleanedInputRDD \
+#     .map(lambda (log, _): (log.endpoint.encode(encoding='utf-8'), 1)) \
+#     .reduceByKey(lambda x, y: x + y) \
+#
+# # Collecting data to plot
+# endpointVisits = endpointVisitsRDD.collect()
+# allEndpoints = []
+# allVisits = []
+# for (endpoint, visits) in endpointVisits:
+#     allEndpoints.append(endpoint)
+#     allVisits.append(visits)
+#     # plt.bar(endpoint, visits)
+#     print '%s\t%d' % (endpoint, visits)
+#
+# figure = plt.figure()
+# plt.axis([0, len(allEndpoints), 0, max(allVisits)])
+# plt.xlabel('Endpoints')
+# plt.ylabel('Number of requests')
+# plt.plot(allVisits)
 # plt.show()
+
+# # (2f) ******************************
+# mostVisitedEndpoint = cleanedInputRDD \
+#     .map(lambda (log, _): (log.endpoint.encode(encoding='utf-8'), 1)) \
+#     .reduceByKey(lambda x, y: x + y) \
+#     .takeOrdered(10, lambda (endpoint, count): count * (-1))
+#
+# print mostVisitedEndpoint
+
+# # (3a) Exercise: Top Ten Error Endpoints
+#
+# out = cleanedInputRDD \
+#     .filter(lambda (log, _): log.status_code != 200) \
+#     .map(lambda (log, flag): (log.endpoint, 1)) \
+#     .reduceByKey(lambda x, y: x + y) \
+#     .takeOrdered(10, lambda (_, count): count * (-1))
+#
+# print out
+
+# # (3b) ******************************
+# count = cleanedInputRDD \
+#     .map(lambda (log, _): (log.host, 1)) \
+#     .reduceByKey(lambda x, y: 1) \
+#     .map(lambda (_, i): i) \
+#     .reduce(lambda x, y: x + y)
+#
+# count2 = cleanedInputRDD \
+#     .map(lambda (log, _): (log.host, 1)) \
+#     .reduceByKey(lambda x, y: 1) \
+#     .count()
+#
+# print count
+# print count2
+
+# # (3c) ******************************
+# # (day#, host#, 1)
+# hostsPerDayRDD = cleanedInputRDD.map(lambda (log, _): (log.time.day, log.host, 1)).cache()
+#
+# dailyHosts = hostsPerDayRDD \
+#     .distinct() \
+#     .map(lambda (day, host, i): (day, i)) \
+#     .reduceByKey(lambda x, y: x + y) \
+#     .sortByKey(ascending=True) \
+#     .cache()
+#
+# dailyRequests = hostsPerDayRDD \
+#     .map(lambda (day, host, i): (day, i)) \
+#     .reduceByKey(lambda x, y: x + y) \
+#     .cache()
+#
+# avgDailyReqPerHost = dailyHosts.join(dailyRequests) \
+#     .map(lambda (day, (hosts, requests)): (day, requests / hosts))
+#
+# print avgDailyReqPerHost.collect()
+
+# (4a) ******************************
+badRecords = cleanedInputRDD \
+    .map(lambda (log, _): log) \
+    .filter(lambda log: log.status_code == 404).cache()
+
+# # (4b) Exercise: Listing 404 Response Code Records
+# print badRecords.map(lambda log: log.endpoint).distinct().take(40)
+
+# # (4c) Exercise: Listing the Top Twenty 404 Response Code Endpoints
+# print badRecords \
+#     .map(lambda log: (log.endpoint, 1)) \
+#     .reduceByKey(lambda x, y: x + y) \
+#     .sortBy(lambda (endpoint, total): (-1) * total) \
+#     .take(30)
+
+# # (4d) Exercise: Listing the Top Twenty-five 404 Response Code Hosts
+# print badRecords \
+#     .map(lambda log: (log.host, 1)) \
+#     .reduceByKey(lambda x, y: x + y) \
+#     .sortBy(lambda (host, total): -total) \
+#     .take(25)
+
+# (4e) Exercise: Listing 404 Response Codes per Day
+errDataSorted = badRecords \
+    .map(lambda log: (log.time.day, 1)) \
+    .reduceByKey(lambda x, y: x + y) \
+    .sortByKey(ascending=True).cache()
 
